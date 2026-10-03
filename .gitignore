@@ -1,0 +1,22 @@
+node_modules/
+.expo/
+dist/
+npm-debug.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+web-build/
+android/
+ios/
+coverage/
+.system_generated/
+*.log
+
+# Environment variables & secrets
+.env
+.env.local
+.env.*
+*.env
