@@ -10,6 +10,7 @@ import {
   Share,
   Dimensions,
   ActivityIndicator,
+  Linking,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import {
@@ -29,6 +30,10 @@ import {
   CheckCircle2,
   X,
   Volume2,
+  AlertCircle,
+  RotateCcw,
+  Youtube,
+  ExternalLink,
 } from 'lucide-react-native';
 import { usePlayerStore } from '../store/playerStore';
 import { useLibraryStore } from '../store/libraryStore';
@@ -50,10 +55,12 @@ export const PlayerScreen: React.FC = () => {
     repeatMode,
     queue,
     queueIndex,
+    error,
     togglePlayPause,
     seekTo,
     next,
     previous,
+    retry,
     setShuffle,
     setRepeatMode,
     playTrack,
@@ -111,6 +118,24 @@ export const PlayerScreen: React.FC = () => {
     seekTo(Math.floor(ratio * duration));
   };
 
+  const handleOpenYouTube = async () => {
+    if (!currentTrack) return;
+    const videoId = currentTrack.videoId || currentTrack.youtubeVideoId;
+    const url = videoId ? `https://www.youtube.com/watch?v=${videoId}` : (currentTrack.url || '');
+    if (!url) return;
+    try {
+      const appUrl = videoId ? `vnd.youtube://${videoId}` : url;
+      const can = await Linking.canOpenURL(appUrl);
+      if (can) {
+        await Linking.openURL(appUrl);
+      } else {
+        await Linking.openURL(url);
+      }
+    } catch {
+      await Linking.openURL(url).catch(() => {});
+    }
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: colors.playerBackground }]}>
       {/* Top Navigation Bar */}
@@ -162,6 +187,46 @@ export const PlayerScreen: React.FC = () => {
             />
           </TouchableOpacity>
         </View>
+
+        {/* Error State with Retry Button */}
+        {error && (
+          <View style={[styles.errorBanner, { backgroundColor: colors.surfaceVariant, borderColor: colors.error }]}>
+            <View style={styles.errorTextRow}>
+              <AlertCircle size={18} color={colors.error} />
+              <Text numberOfLines={2} style={[styles.errorBannerText, { color: colors.text }]}>
+                {error}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.retryBtn, { backgroundColor: colors.primary }]}
+              onPress={retry}
+              activeOpacity={0.8}
+            >
+              <RotateCcw size={14} color="#FFFFFF" />
+              <Text style={styles.retryBtnText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* YouTube Official Video Action */}
+        {currentTrack.source === 'youtube' && (
+          <View style={[styles.youtubeBanner, { backgroundColor: 'rgba(255, 0, 0, 0.08)', borderColor: '#FF0000' }]}>
+            <View style={styles.errorTextRow}>
+              <Youtube size={20} color="#FF0000" />
+              <Text style={[styles.youtubeBannerText, { color: colors.text }]}>
+                YouTube Music Video
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.openYtBtn, { backgroundColor: '#FF0000' }]}
+              onPress={handleOpenYouTube}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.openYtBtnText}>Watch on YouTube</Text>
+              <ExternalLink size={12} color="#FFFFFF" style={{ marginLeft: 4 }} />
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Audio Scrubber / Progress Bar */}
         <View style={styles.scrubberContainer}>
@@ -590,5 +655,68 @@ const styles = StyleSheet.create({
   },
   queueArtist: {
     fontSize: 12,
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginVertical: 10,
+    width: '100%',
+  },
+  errorTextRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 10,
+  },
+  errorBannerText: {
+    fontSize: 12,
+    fontWeight: '500',
+    marginLeft: 8,
+    flex: 1,
+  },
+  retryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  retryBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+    marginLeft: 4,
+  },
+  youtubeBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginVertical: 10,
+    width: '100%',
+  },
+  youtubeBannerText: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 8,
+    flex: 1,
+  },
+  openYtBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+  },
+  openYtBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
   },
 });

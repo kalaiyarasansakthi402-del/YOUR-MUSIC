@@ -31,7 +31,7 @@ export const TrackItem: React.FC<TrackItemProps> = ({
   showDownload = true,
 }) => {
   const { colors } = useTheme();
-  const { currentTrack, isPlaying, playTrack } = usePlayerStore();
+  const { currentTrack, isPlaying, isBuffering, playTrack } = usePlayerStore();
   const { toggleFavorite, isFavorite, downloadTrack, downloadProgress } = useLibraryStore();
 
   const isCurrent = currentTrack?.id === track.id;
@@ -69,16 +69,22 @@ export const TrackItem: React.FC<TrackItemProps> = ({
     >
       {/* Artwork with fallback */}
       <View style={styles.artworkContainer}>
-        {track.artwork ? (
-          <Image source={{ uri: track.artwork }} style={styles.artwork} />
+        {(track.artwork || track.thumbnail) ? (
+          <Image source={{ uri: track.artwork || track.thumbnail }} style={styles.artwork} />
         ) : (
           <View style={[styles.placeholderArt, { backgroundColor: colors.surfaceVariant }]}>
             <Play size={20} color={colors.primaryLight} />
           </View>
         )}
-        {isCurrent && isPlaying && (
-          <View style={[styles.playingOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}>
-            <Volume2 size={18} color="#FFFFFF" />
+        {isCurrent && (
+          <View style={[styles.playingOverlay, { backgroundColor: 'rgba(0,0,0,0.55)' }]}>
+            {isBuffering ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : isPlaying ? (
+              <Volume2 size={18} color="#FFFFFF" />
+            ) : (
+              <Play size={16} color="#FFFFFF" fill="#FFFFFF" />
+            )}
           </View>
         )}
       </View>

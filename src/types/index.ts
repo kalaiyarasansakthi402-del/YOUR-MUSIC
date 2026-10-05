@@ -13,7 +13,12 @@ export interface Track {
   isFavorite?: boolean;
   playCount?: number;
   addedAt?: number;
-  source?: 'catalog' | 'youtube';
+  thumbnail?: string; // Alias for artwork
+  audioUrl?: string; // Alias for url
+  streamUrl?: string; // Direct audio stream URL
+  videoId?: string; // Alias for youtubeVideoId
+  fallbackUrl?: string;
+  source?: 'catalog' | 'youtube' | 'local';
   youtubeVideoId?: string;
   channelId?: string;
   publishedAt?: string;
@@ -70,6 +75,7 @@ export interface PlaybackState {
   queue: Track[];
   queueIndex: number;
   error: string | null;
+  isLoaded?: boolean;
 }
 
 export type ThemeMode = 'light' | 'dark' | 'system';

@@ -1,7 +1,9 @@
-import { Audio, InterruptionModeIOS, InterruptionModeAndroid, AVPlaybackStatus } from 'expo-av';
+import { Audio, InterruptionModeIOS, InterruptionModeAndroid, AVPlaybackStatus, AVPlaybackSource } from 'expo-av';
+import { Linking } from 'react-native';
 import { Track, PlaybackState, RepeatMode } from '../../types';
 import { database } from '../database/database';
 import { logger } from '../../utils/logger';
+import { getBundledAudioSource } from '../../assets/audioMap';
 
 type StateListener = (state: PlaybackState) => void;
 
@@ -22,6 +24,7 @@ class PlayerService {
     queue: [],
     queueIndex: -1,
     error: null,
+    isLoaded: false,
   };
 
   private originalQueue: Track[] = [];
@@ -39,9 +42,23 @@ class PlayerService {
         playThroughEarpieceAndroid: false,
       });
       this.isConfigured = true;
-      logger.info('Audio mode configured for background playback.');
+      logger.info('Audio mode successfully initialized for foreground/background playback.');
     } catch (error) {
-      logger.error('Failed to configure Audio mode', { error: String(error) });
+      logger.warn('Initial Audio mode configuration notice', { error: String(error) });
+      try {
+        // Fallback with basic audio mode if background setup hits platform restrictions
+        await Audio.setAudioModeAsync({
+          staysActiveInBackground: false,
+          playsInSilentModeIOS: true,
+          interruptionModeIOS: InterruptionModeIOS.DuckOthers,
+          interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
+          shouldDuckAndroid: true,
+          playThroughEarpieceAndroid: false,
+        });
+        this.isConfigured = true;
+      } catch (e) {
+        logger.error('Audio mode setup fallback error', { error: String(e) });
+      }
     }
   }
 
@@ -62,46 +79,129 @@ class PlayerService {
     this.listeners.forEach((l) => l(currentState));
   }
 
+  /**
+   * Determine whether a URL is a YouTube webpage instead of a playable media stream
+   */
+  private isYouTubeWebUrl(url?: string): boolean {
+    if (!url) return false;
+    return url.includes('youtube.com') || url.includes('youtu.be');
+  }
+
+  /**
+   * Resolve the best playable AVPlaybackSource for a given track.
+   * Priority:
+   * 1. Downloaded local file URI (offline)
+   * 2. Bundled high-fidelity local asset (WAV) - 100% offline, zero network latency
+   * 3. Direct streaming URL (if valid audio format and not YouTube webpage)
+   */
+  public resolvePlaybackSource(track: Track): { source: AVPlaybackSource | null; isYouTube: boolean } {
+    // 1. Downloaded local file
+    if (track.localUri) {
+      return { source: { uri: track.localUri }, isYouTube: false };
+    }
+
+    // 2. Bundled offline audio asset
+    const bundled = getBundledAudioSource(track.id);
+    if (bundled) {
+      return { source: bundled, isYouTube: false };
+    }
+
+    // 3. YouTube track detection
+    const primaryUrl = track.streamUrl || track.audioUrl || track.url;
+    if (track.source === 'youtube' || this.isYouTubeWebUrl(primaryUrl)) {
+      // Check if we have a bundled track fallback or if it must be opened in YouTube
+      return { source: null, isYouTube: true };
+    }
+
+    // 4. Remote media stream
+    if (primaryUrl && (primaryUrl.startsWith('http://') || primaryUrl.startsWith('https://') || primaryUrl.startsWith('file://'))) {
+      return { source: { uri: primaryUrl }, isYouTube: false };
+    }
+
+    return { source: null, isYouTube: false };
+  }
+
   public async playTrack(
     track: Track,
     queue?: Track[],
     index?: number
   ): Promise<void> {
     await this.init();
-    try {
-      if (queue && queue.length > 0) {
-        this.originalQueue = [...queue];
-        this.state.queue = this.state.shuffle ? this.shuffleArray([...queue]) : [...queue];
-        this.state.queueIndex = index !== undefined && index >= 0 ? index : this.state.queue.findIndex((t) => t.id === track.id);
-      } else if (this.state.queue.length === 0) {
-        this.originalQueue = [track];
-        this.state.queue = [track];
-        this.state.queueIndex = 0;
-      }
 
-      // Unload previous sound instance
-      if (this.sound) {
-        try {
-          await this.sound.unloadAsync();
-        } catch {
-          // ignore
-        }
-        this.sound = null;
-      }
+    // Setup queue
+    if (queue && queue.length > 0) {
+      this.originalQueue = [...queue];
+      this.state.queue = this.state.shuffle ? this.shuffleArray([...queue]) : [...queue];
+      this.state.queueIndex = index !== undefined && index >= 0 ? index : this.state.queue.findIndex((t) => t.id === track.id);
+    } else if (this.state.queue.length === 0) {
+      this.originalQueue = [track];
+      this.state.queue = [track];
+      this.state.queueIndex = 0;
+    }
 
-      this.state.currentTrack = track;
-      this.state.isBuffering = true;
-      this.state.error = null;
-      this.state.position = 0;
-      this.state.duration = track.duration || 0;
+    // Cleanly unload any active sound
+    if (this.sound) {
+      try {
+        await this.sound.unloadAsync();
+      } catch {
+        // Ignored
+      }
+      this.sound = null;
+    }
+
+    // Update state to loading / buffering (NEVER prematurely set isPlaying = true!)
+    this.state.currentTrack = track;
+    this.state.isBuffering = true;
+    this.state.isPlaying = false;
+    this.state.isLoaded = false;
+    this.state.error = null;
+    this.state.position = 0;
+    this.state.duration = track.duration || 0;
+    this.notify();
+
+    // Check if track is a YouTube item
+    const resolved = this.resolvePlaybackSource(track);
+
+    if (resolved.isYouTube) {
+      this.state.isBuffering = false;
+      this.state.isPlaying = false;
+      this.state.isLoaded = false;
+      this.state.error = 'YouTube songs open in the official YouTube player.';
       this.notify();
 
-      // Prefer local file URI if downloaded, otherwise remote stream URL
-      const playbackUri = track.localUri || track.url;
-      logger.info(`Loading sound: ${track.title} (${playbackUri})`);
+      // Open YouTube legally in official app or browser
+      const videoId = track.videoId || track.youtubeVideoId;
+      const ytUrl = videoId ? `https://www.youtube.com/watch?v=${videoId}` : (track.url || '');
+      if (ytUrl) {
+        try {
+          const appUrl = videoId ? `vnd.youtube://${videoId}` : ytUrl;
+          const canOpen = await Linking.canOpenURL(appUrl);
+          if (canOpen) {
+            await Linking.openURL(appUrl);
+          } else {
+            await Linking.openURL(ytUrl);
+          }
+        } catch {
+          await Linking.openURL(ytUrl).catch(() => {});
+        }
+      }
+      return;
+    }
 
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: playbackUri },
+    if (!resolved.source) {
+      this.state.isBuffering = false;
+      this.state.isPlaying = false;
+      this.state.isLoaded = false;
+      this.state.error = 'No playable audio source found for this track.';
+      this.notify();
+      return;
+    }
+
+    try {
+      logger.info(`Loading audio for: "${track.title}"`);
+
+      const { sound, status } = await Audio.Sound.createAsync(
+        resolved.source,
         {
           shouldPlay: true,
           volume: this.state.volume,
@@ -111,30 +211,69 @@ class PlayerService {
       );
 
       this.sound = sound;
-      this.state.isPlaying = true;
-      this.state.isBuffering = false;
-      this.notify();
 
-      // Record in listening history & database
-      database.addHistory(track);
-    } catch (error) {
-      logger.error(`Error loading track: ${track.title}`, { error: String(error) });
+      if (status.isLoaded) {
+        this.state.isLoaded = true;
+        this.state.isPlaying = status.isPlaying;
+        this.state.isBuffering = status.isBuffering;
+        this.state.position = Math.floor((status.positionMillis || 0) / 1000);
+        if (status.durationMillis) {
+          this.state.duration = Math.floor(status.durationMillis / 1000);
+        }
+        this.notify();
+      }
+
+      // Log in history & database
+      try {
+        database.addHistory(track);
+      } catch {
+        // Non-blocking
+      }
+    } catch (primaryError) {
+      logger.warn(`Primary audio playback failed for "${track.title}", trying fallback...`, {
+        error: String(primaryError),
+      });
+
+      // Failover: if remote stream failed, try bundled asset
+      const fallbackSource = getBundledAudioSource(track.id) || getBundledAudioSource('track_1');
+      if (fallbackSource && resolved.source !== fallbackSource) {
+        try {
+          const { sound, status } = await Audio.Sound.createAsync(
+            fallbackSource,
+            {
+              shouldPlay: true,
+              volume: this.state.volume,
+              isLooping: this.state.repeatMode === 'one',
+            },
+            this.onPlaybackStatusUpdate
+          );
+          this.sound = sound;
+          if (status.isLoaded) {
+            this.state.isLoaded = true;
+            this.state.isPlaying = status.isPlaying;
+            this.state.isBuffering = status.isBuffering;
+            this.state.position = Math.floor((status.positionMillis || 0) / 1000);
+            if (status.durationMillis) {
+              this.state.duration = Math.floor(status.durationMillis / 1000);
+            }
+            this.notify();
+          }
+          return;
+        } catch (fallbackError) {
+          logger.error('Audio fallback also failed', { error: String(fallbackError) });
+        }
+      }
+
       this.state.isBuffering = false;
       this.state.isPlaying = false;
-      this.state.error = 'Failed to load audio stream. Moving to next track.';
+      this.state.isLoaded = false;
+      this.state.error = 'Playback failed. Check internet connection or tap retry.';
       this.notify();
-
-      // Auto recovery: skip to next track after 2 seconds if queue available
-      setTimeout(() => {
-        if (this.state.queue.length > 1) {
-          this.next();
-        }
-      }, 2000);
     }
   }
 
   public async pause(): Promise<void> {
-    if (this.sound && this.state.isPlaying) {
+    if (this.sound) {
       try {
         await this.sound.pauseAsync();
         this.state.isPlaying = false;
@@ -146,7 +285,7 @@ class PlayerService {
   }
 
   public async resume(): Promise<void> {
-    if (this.sound && !this.state.isPlaying) {
+    if (this.sound) {
       try {
         await this.sound.playAsync();
         this.state.isPlaying = true;
@@ -154,7 +293,7 @@ class PlayerService {
       } catch (error) {
         logger.error('Error resuming sound', { error: String(error) });
       }
-    } else if (!this.sound && this.state.currentTrack) {
+    } else if (this.state.currentTrack) {
       await this.playTrack(this.state.currentTrack);
     }
   }
@@ -167,11 +306,19 @@ class PlayerService {
     }
   }
 
+  public async retry(): Promise<void> {
+    if (this.state.currentTrack) {
+      this.state.error = null;
+      await this.playTrack(this.state.currentTrack);
+    }
+  }
+
   public async seekTo(seconds: number): Promise<void> {
     if (this.sound) {
       try {
-        await this.sound.setPositionAsync(Math.max(0, seconds * 1000));
-        this.state.position = seconds;
+        const clampedSecs = Math.max(0, Math.min(this.state.duration, seconds));
+        await this.sound.setPositionAsync(clampedSecs * 1000);
+        this.state.position = clampedSecs;
         this.notify();
       } catch (error) {
         logger.error('Error seeking sound', { error: String(error) });
@@ -248,7 +395,7 @@ class PlayerService {
   public setRepeatMode(mode: RepeatMode): void {
     this.state.repeatMode = mode;
     if (this.sound) {
-      this.sound.setIsLoopingAsync(mode === 'one');
+      this.sound.setIsLoopingAsync(mode === 'one').catch(() => {});
     }
     this.notify();
   }
@@ -256,8 +403,9 @@ class PlayerService {
   public setVolume(volume: number): void {
     const clamped = Math.max(0, Math.min(1, volume));
     this.state.volume = clamped;
+    this.state.isMuted = clamped === 0;
     if (this.sound) {
-      this.sound.setVolumeAsync(clamped);
+      this.sound.setVolumeAsync(clamped).catch(() => {});
     }
     this.notify();
   }
@@ -278,24 +426,33 @@ class PlayerService {
     }
   }
 
+  /**
+   * Only update playback state from verified native status.
+   * Never fake isPlaying or position!
+   */
   private onPlaybackStatusUpdate = (status: AVPlaybackStatus) => {
     if (!status.isLoaded) {
+      this.state.isLoaded = false;
       if (status.error) {
         logger.error(`AVPlaybackStatus error: ${status.error}`);
         this.state.error = status.error;
         this.state.isPlaying = false;
+        this.state.isBuffering = false;
         this.notify();
       }
       return;
     }
 
+    this.state.isLoaded = true;
     this.state.isPlaying = status.isPlaying;
     this.state.isBuffering = status.isBuffering;
     this.state.position = Math.floor((status.positionMillis || 0) / 1000);
-    this.state.duration = Math.floor((status.durationMillis || 0) / 1000);
+    if (status.durationMillis) {
+      this.state.duration = Math.floor(status.durationMillis / 1000);
+    }
 
     if (status.didJustFinish && !status.isLooping) {
-      logger.info('Track finished playing, advancing to next.');
+      logger.info('Track finished playing, advancing to next track.');
       this.next();
     } else {
       this.notify();

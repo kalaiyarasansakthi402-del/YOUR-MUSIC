@@ -41,9 +41,15 @@ jest.mock('expo-av', () => {
   return {
     Audio: {
       Sound: {
-        createAsync: jest.fn().mockResolvedValue({
-          sound: mockSoundInstance,
-          status: { isLoaded: true, isPlaying: false, positionMillis: 0, durationMillis: 180000 },
+        createAsync: jest.fn().mockImplementation(async (source, initialStatus, onPlaybackStatusUpdate) => {
+          if (onPlaybackStatusUpdate) {
+            mockStatusUpdateCallback = onPlaybackStatusUpdate;
+          }
+          const isPlaying = Boolean(initialStatus?.shouldPlay);
+          return {
+            sound: mockSoundInstance,
+            status: { isLoaded: true, isPlaying, isBuffering: false, positionMillis: 0, durationMillis: 180000 },
+          };
         }),
       },
       setAudioModeAsync: jest.fn().mockResolvedValue({}),

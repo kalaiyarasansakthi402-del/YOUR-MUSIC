@@ -15,6 +15,7 @@ interface PlayerStoreState extends PlaybackState {
   setVolume: (volume: number) => void;
   addToQueue: (track: Track) => void;
   removeFromQueue: (index: number) => void;
+  retry: () => Promise<void>;
 }
 
 export const usePlayerStore = create<PlayerStoreState>((set) => {
@@ -72,6 +73,10 @@ export const usePlayerStore = create<PlayerStoreState>((set) => {
 
     removeFromQueue: (index: number) => {
       playerService.removeFromQueue(index);
+    },
+
+    retry: async () => {
+      await playerService.retry();
     },
   };
 });

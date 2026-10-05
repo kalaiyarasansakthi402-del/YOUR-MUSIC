@@ -48,7 +48,7 @@ export const MiniPlayer: React.FC = () => {
 
         <View style={styles.content}>
           {/* Artwork */}
-          <Image source={{ uri: currentTrack.artwork }} style={styles.artwork} />
+          <Image source={{ uri: currentTrack.artwork || currentTrack.thumbnail }} style={styles.artwork} />
 
           {/* Track Info */}
           <View style={styles.info}>
