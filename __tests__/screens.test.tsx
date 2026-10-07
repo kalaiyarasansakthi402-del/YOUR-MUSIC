@@ -22,7 +22,8 @@ const renderWithProviders = (component: React.ReactElement) => {
 describe('Screen UI Rendering & Smoke Test Suite', () => {
   it('renders HomeScreen without crashing', () => {
     const { getByText } = renderWithProviders(<HomeScreen />);
-    expect(getByText('Trending Now')).toBeTruthy();
+    expect(getByText('Your Music')).toBeTruthy();
+    expect(getByText('By Anzles')).toBeTruthy();
   });
 
   it('renders ExploreScreen without crashing', () => {

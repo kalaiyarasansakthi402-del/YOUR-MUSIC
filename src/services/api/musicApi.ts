@@ -201,6 +201,9 @@ const CURATED_ALBUMS: Album[] = [
 export interface MusicProvider {
   getTrendingTracks(): Promise<Track[]>;
   getQuickPicks(): Promise<Track[]>;
+  getRecommendedSongs(): Promise<Track[]>;
+  getRecommendedArtists(): Promise<Artist[]>;
+  getNewReleases(): Promise<Track[]>;
   getGenres(): Promise<string[]>;
   getArtists(): Promise<Artist[]>;
   getArtistById(id: string): Promise<Artist | null>;
@@ -227,6 +230,18 @@ export class ResilientMusicApi implements MusicProvider {
 
   public async getQuickPicks(): Promise<Track[]> {
     return [...CURATED_TRACKS].reverse();
+  }
+
+  public async getRecommendedSongs(): Promise<Track[]> {
+    return CURATED_TRACKS.slice(0, 6);
+  }
+
+  public async getRecommendedArtists(): Promise<Artist[]> {
+    return CURATED_ARTISTS;
+  }
+
+  public async getNewReleases(): Promise<Track[]> {
+    return CURATED_TRACKS.slice(2, 8);
   }
 
   public async getGenres(): Promise<string[]> {

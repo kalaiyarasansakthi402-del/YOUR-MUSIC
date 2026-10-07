@@ -91,4 +91,84 @@ describe('Player Service Continuous Reliability Suite', () => {
     playerService.removeFromQueue(2);
     expect(playerService.getState().queue.length).toBe(2);
   });
+
+  it('updates status and playbackSource correctly for media stream and YouTube tracks', async () => {
+    await playerService.playTrack(testTrack1);
+    const state = playerService.getState();
+    expect(state.status).toBe('playing');
+    expect(state.playbackSource).toEqual({ type: 'audio', url: testTrack1.url });
+
+    const ytTrack: Track = {
+      id: 'yt_abc123',
+      title: 'YouTube Track',
+      artist: 'Channel',
+      artwork: 'https://example.com/yt.jpg',
+      url: 'https://www.youtube.com/watch?v=abc12345678',
+      videoId: 'abc12345678',
+      duration: 210,
+      source: 'youtube',
+    };
+
+    await playerService.playTrack(ytTrack);
+    const ytState = playerService.getState();
+    expect(ytState.status).toBe('ready');
+    expect(ytState.playbackSource).toEqual({
+      type: 'youtube',
+      videoId: 'abc12345678',
+      title: 'YouTube Track',
+    });
+  });
+
+  it('stops playback and resets status to idle', async () => {
+    await playerService.playTrack(testTrack1);
+    await playerService.stop();
+    const state = playerService.getState();
+    expect(state.isPlaying).toBe(false);
+    expect(state.status).toBe('idle');
+  });
+
+  it('updates playback rate within valid limits', async () => {
+    await playerService.setPlaybackRate(1.25);
+    expect(playerService.getState().playbackRate).toBe(1.25);
+
+    await playerService.setPlaybackRate(0.5);
+    expect(playerService.getState().playbackRate).toBe(0.5);
+
+    // Reset
+    await playerService.setPlaybackRate(1.0);
+    expect(playerService.getState().playbackRate).toBe(1.0);
+  });
+
+  it('clears queue while preserving current track', async () => {
+    await playerService.playTrack(testTrack1, [testTrack1, testTrack2], 0);
+    expect(playerService.getState().queue.length).toBe(2);
+
+    playerService.clearQueue();
+    expect(playerService.getState().queue.length).toBe(1);
+    expect(playerService.getState().queue[0].id).toBe('tr_1');
+  });
+
+  it('supports playNext to insert track right after current song', async () => {
+    await playerService.playTrack(testTrack1, [testTrack1, testTrack2], 0);
+    const testTrack3: Track = {
+      id: 'tr_3',
+      title: 'Track Three',
+      artist: 'Artist C',
+      artwork: 'https://example.com/3.jpg',
+      url: 'https://example.com/3.mp3',
+      duration: 150,
+    };
+    playerService.playNext(testTrack3);
+    const state = playerService.getState();
+    expect(state.queue.length).toBe(3);
+    expect(state.queue[1].id).toBe('tr_3');
+  });
+
+  it('supports reorderQueue correctly', async () => {
+    await playerService.playTrack(testTrack1, [testTrack1, testTrack2], 0);
+    playerService.reorderQueue(0, 1);
+    const state = playerService.getState();
+    expect(state.queue[0].id).toBe('tr_2');
+    expect(state.queue[1].id).toBe('tr_1');
+  });
 });

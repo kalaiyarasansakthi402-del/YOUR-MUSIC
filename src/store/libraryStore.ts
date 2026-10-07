@@ -9,6 +9,7 @@ interface LibraryStoreState {
   history: Track[];
   playlists: Playlist[];
   downloads: Track[];
+  allTracks: Track[];
   isLoading: boolean;
   downloadProgress: Record<string, number>;
 
@@ -22,6 +23,7 @@ interface LibraryStoreState {
   downloadTrack: (track: Track) => Promise<void>;
   deleteDownload: (trackId: string) => Promise<void>;
   clearHistory: () => void;
+  clearAllData: () => void;
 }
 
 export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
@@ -29,6 +31,7 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
   history: [],
   playlists: [],
   downloads: [],
+  allTracks: [],
   isLoading: false,
   downloadProgress: {},
 
@@ -40,7 +43,8 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
       const history = database.getHistory();
       const playlists = database.getPlaylists();
       const downloads = database.getDownloads();
-      set({ favorites, history, playlists, downloads, isLoading: false });
+      const allTracks = database.getAllTracks();
+      set({ favorites, history, playlists, downloads, allTracks, isLoading: false });
     } catch (error) {
       logger.error('Failed to load library data from SQLite', { error: String(error) });
       set({ isLoading: false });
@@ -123,5 +127,10 @@ export const useLibraryStore = create<LibraryStoreState>((set, get) => ({
   clearHistory: () => {
     database.clearHistory();
     set({ history: [] });
+  },
+
+  clearAllData: () => {
+    database.clearAllData();
+    set({ favorites: [], history: [], playlists: [], downloads: [], allTracks: [] });
   },
 }));

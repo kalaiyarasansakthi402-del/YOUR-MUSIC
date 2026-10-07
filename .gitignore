@@ -9,7 +9,7 @@ npm-debug.*
 *.mobileprovision
 *.orig.*
 web-build/
-android/
+# Native Android source is versioned; local build output is ignored below.
 ios/
 coverage/
 .system_generated/
@@ -20,3 +20,46 @@ coverage/
 .env.local
 .env.*
 *.env
+
+# Builds & APKs
+release/
+*.apk
+
+# Safe environment template
+!.env.example
+
+# Expo local state
+.expo-shared/
+
+# Android / Gradle local state and generated files
+.gradle/
+android/.gradle/
+android/build/
+android/app/build/
+android/.cxx/
+android/app/.cxx/
+android/local.properties
+.idea/
+*.iml
+*.hprof
+*.jsbundle
+build/
+
+# App bundles and signing material
+*.aab
+*.ipa
+*.keystore
+*.pem
+*.pfx
+
+# Service credentials
+google-services.json
+GoogleService-Info.plist
+credentials.json
+credentials.*.json
+service-account*.json
+service_account*.json
+
+# Operating system metadata
+.DS_Store
+Thumbs.db

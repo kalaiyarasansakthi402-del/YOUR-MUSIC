@@ -34,6 +34,8 @@ import {
   RotateCcw,
   Youtube,
   ExternalLink,
+  Gauge,
+  Trash2,
 } from 'lucide-react-native';
 import { usePlayerStore } from '../store/playerStore';
 import { useLibraryStore } from '../store/libraryStore';
@@ -63,6 +65,9 @@ export const PlayerScreen: React.FC = () => {
     retry,
     setShuffle,
     setRepeatMode,
+    playbackRate,
+    setPlaybackRate,
+    clearQueue,
     playTrack,
     removeFromQueue,
   } = usePlayerStore();
@@ -99,6 +104,13 @@ export const PlayerScreen: React.FC = () => {
     const modes: RepeatMode[] = ['off', 'all', 'one'];
     const nextMode = modes[(modes.indexOf(repeatMode) + 1) % modes.length];
     setRepeatMode(nextMode);
+  };
+
+  const handleToggleSpeed = () => {
+    const speeds = [0.75, 1.0, 1.25, 1.5, 2.0];
+    const currentIndex = speeds.indexOf(playbackRate ?? 1.0);
+    const nextSpeed = speeds[(currentIndex + 1) % speeds.length];
+    setPlaybackRate(nextSpeed);
   };
 
   const handleShare = async () => {
@@ -315,7 +327,7 @@ export const PlayerScreen: React.FC = () => {
             style={[styles.extraBtn, { backgroundColor: colors.surfaceVariant }]}
             onPress={() => setShowLyrics(true)}
           >
-            <FileText size={18} color={colors.text} />
+            <FileText size={16} color={colors.text} />
             <Text style={[styles.extraBtnText, { color: colors.text }]}>{t.player.lyrics}</Text>
           </TouchableOpacity>
 
@@ -323,8 +335,32 @@ export const PlayerScreen: React.FC = () => {
             style={[styles.extraBtn, { backgroundColor: colors.surfaceVariant }]}
             onPress={() => setShowQueue(true)}
           >
-            <ListMusic size={18} color={colors.text} />
+            <ListMusic size={16} color={colors.text} />
             <Text style={[styles.extraBtnText, { color: colors.text }]}>Queue ({queue.length})</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.extraBtn,
+              {
+                backgroundColor:
+                  playbackRate && playbackRate !== 1.0 ? colors.primary : colors.surfaceVariant,
+              },
+            ]}
+            onPress={handleToggleSpeed}
+          >
+            <Gauge
+              size={16}
+              color={playbackRate && playbackRate !== 1.0 ? '#FFFFFF' : colors.text}
+            />
+            <Text
+              style={[
+                styles.extraBtnText,
+                { color: playbackRate && playbackRate !== 1.0 ? '#FFFFFF' : colors.text },
+              ]}
+            >
+              {playbackRate ? `${playbackRate}x` : '1.0x'}
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -335,12 +371,12 @@ export const PlayerScreen: React.FC = () => {
             {isDownloading ? (
               <ActivityIndicator size="small" color={colors.primaryLight} />
             ) : currentTrack.isDownloaded ? (
-              <CheckCircle2 size={18} color={colors.success} />
+              <CheckCircle2 size={16} color={colors.success} />
             ) : (
-              <ArrowDownCircle size={18} color={colors.text} />
+              <ArrowDownCircle size={16} color={colors.text} />
             )}
             <Text style={[styles.extraBtnText, { color: colors.text }]}>
-              {currentTrack.isDownloaded ? 'Downloaded' : 'Download'}
+              {currentTrack.isDownloaded ? 'Saved' : 'Save'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -376,9 +412,20 @@ export const PlayerScreen: React.FC = () => {
           <View style={[styles.drawerCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <View style={styles.drawerHeader}>
               <Text style={[styles.drawerTitle, { color: colors.text }]}>{t.player.queue}</Text>
-              <TouchableOpacity onPress={() => setShowQueue(false)}>
-                <X size={24} color={colors.text} />
-              </TouchableOpacity>
+              <View style={styles.queueHeaderActions}>
+                {queue.length > 1 && (
+                  <TouchableOpacity
+                    style={[styles.clearQueueBtn, { backgroundColor: colors.surfaceVariant }]}
+                    onPress={clearQueue}
+                  >
+                    <Trash2 size={14} color={colors.error} />
+                    <Text style={[styles.clearQueueText, { color: colors.error }]}>Clear</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity onPress={() => setShowQueue(false)}>
+                  <X size={24} color={colors.text} />
+                </TouchableOpacity>
+              </View>
             </View>
 
             <ScrollView contentContainerStyle={styles.queueScroll}>
@@ -610,6 +657,23 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 16,
+  },
+  queueHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  clearQueueBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  clearQueueText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   drawerTitle: {
     fontSize: 18,

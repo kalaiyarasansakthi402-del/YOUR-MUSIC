@@ -17,6 +17,21 @@ export class YouTubeApiError extends Error {
   }
 }
 
+/**
+ * Parses an ISO 8601 duration string (e.g. "PT3M45S", "PT1H2M10S", "PT45S") to total seconds.
+ */
+export function parseIsoDuration(durationStr?: string): number {
+  if (!durationStr || typeof durationStr !== 'string') return 0;
+  const regex = /^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/i;
+  const matches = durationStr.match(regex);
+  if (!matches) return 0;
+  const days = parseInt(matches[1] || '0', 10);
+  const hours = parseInt(matches[2] || '0', 10);
+  const minutes = parseInt(matches[3] || '0', 10);
+  const seconds = parseInt(matches[4] || '0', 10);
+  return days * 86400 + hours * 3600 + minutes * 60 + seconds;
+}
+
 interface CacheEntry {
   data: UnifiedSearchResult;
   timestamp: number;
@@ -59,6 +74,59 @@ export class YouTubeProvider {
   }
 
   /**
+   * Enrich video tracks with accurate duration using the videos endpoint
+   * (consumes only 1 quota unit for up to 50 items)
+   */
+  public async enrichTrackDurations(tracks: Track[], apiKey: string): Promise<void> {
+    const videoTracks = tracks.filter((t) => t.videoId || t.youtubeVideoId);
+    if (videoTracks.length === 0) return;
+
+    const ids = videoTracks
+      .map((t) => t.videoId || t.youtubeVideoId)
+      .filter((id): id is string => Boolean(id));
+
+    if (ids.length === 0) return;
+
+    try {
+      const url = new URL('https://www.googleapis.com/youtube/v3/videos');
+      url.searchParams.set('part', 'contentDetails');
+      url.searchParams.set('id', ids.slice(0, 50).join(','));
+      url.searchParams.set('key', apiKey);
+
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 6000);
+
+      const res = await fetch(url.toString(), {
+        signal: controller.signal,
+        headers: { Accept: 'application/json' },
+      });
+      clearTimeout(timer);
+
+      if (res.ok) {
+        const json = await res.json();
+        if (Array.isArray(json.items)) {
+          const durationMap = new Map<string, number>();
+          for (const item of json.items) {
+            if (item.id && item.contentDetails?.duration) {
+              const seconds = parseIsoDuration(item.contentDetails.duration);
+              durationMap.set(item.id, seconds);
+            }
+          }
+
+          for (const track of videoTracks) {
+            const vid = track.videoId || track.youtubeVideoId;
+            if (vid && durationMap.has(vid)) {
+              track.duration = durationMap.get(vid) || 0;
+            }
+          }
+        }
+      }
+    } catch {
+      // Non-blocking fallback: duration enrichment is best effort
+    }
+  }
+
+  /**
    * Search YouTube Data API v3 with automatic caching, retries, and quota handling
    */
   public async search(
@@ -92,9 +160,15 @@ export class YouTubeProvider {
     const cacheKey = `${trimmed.toLowerCase()}_${filter}_${pageToken || 'p0'}`;
     const cached = this.cache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < this.cacheTtlMs) {
-      logger.info(`YouTube search cache hit for query: "${trimmed}"`);
+      logger.info('YOUTUBE_SEARCH_SUCCESS', {
+        query: trimmed,
+        fromCache: true,
+        tracksCount: cached.data.tracks.length,
+      });
       return cached.data;
     }
+
+    logger.info('YOUTUBE_SEARCH_START', { query: trimmed, filter, pageToken });
 
     let typeParam = 'video,channel,playlist';
     if (filter === 'tracks') typeParam = 'video';
@@ -138,7 +212,7 @@ export class YouTubeProvider {
           const errMsg = errorData?.error?.message || response.statusText;
 
           if (response.status === 403 && (errReason === 'quotaExceeded' || errReason === 'dailyLimitExceeded')) {
-            logger.error('YouTube API quota exceeded', { error: errMsg });
+            logger.error('YOUTUBE_SEARCH_ERROR', { error: 'quotaExceeded', message: errMsg });
             return {
               tracks: [],
               artists: [],
@@ -149,7 +223,7 @@ export class YouTubeProvider {
           }
 
           if (response.status === 400) {
-            logger.error('Invalid YouTube API request', { error: errMsg });
+            logger.error('YOUTUBE_SEARCH_ERROR', { error: 'invalidRequest', message: errMsg });
             return {
               tracks: [],
               artists: [],
@@ -165,8 +239,20 @@ export class YouTubeProvider {
         const data: YouTubeSearchResponse = await response.json();
         const mapped = this.mapResponse(data);
 
+        // Enrich video tracks with accurate duration if possible
+        if (mapped.tracks.length > 0) {
+          await this.enrichTrackDurations(mapped.tracks, apiKey);
+        }
+
         // Cache result to protect quota
         this.cache.set(cacheKey, { data: mapped, timestamp: Date.now() });
+
+        logger.info('YOUTUBE_SEARCH_SUCCESS', {
+          query: trimmed,
+          tracksCount: mapped.tracks.length,
+          artistsCount: mapped.artists.length,
+          albumsCount: mapped.albums.length,
+        });
 
         return mapped;
       } catch (error: unknown) {
@@ -175,7 +261,7 @@ export class YouTubeProvider {
         lastError = err;
 
         if (err.name === 'AbortError') {
-          logger.error('YouTube API request timed out');
+          logger.error('YOUTUBE_SEARCH_ERROR', { query: trimmed, error: 'Request timed out' });
           return {
             tracks: [],
             artists: [],
@@ -194,7 +280,7 @@ export class YouTubeProvider {
       }
     }
 
-    logger.error('YouTube API search failure', { error: lastError?.message });
+    logger.error('YOUTUBE_SEARCH_ERROR', { query: trimmed, error: lastError?.message });
     return {
       tracks: [],
       artists: [],

@@ -57,4 +57,30 @@ describe('Database Schema & Migration Suite', () => {
     database.removeTrackFromPlaylist('pl_test_1', sampleTrack.id);
     database.deletePlaylist('pl_test_1');
   });
+
+  it('persists and retrieves playback state and playback queue', () => {
+    database.savePlaybackState('test_track_1', 45, true, 'all', true);
+    const state = database.getPlaybackState();
+    expect(state).not.toBeNull();
+    expect(state?.currentTrackId).toBe('test_track_1');
+    expect(state?.position).toBe(45);
+    expect(state?.isPlaying).toBe(true);
+    expect(state?.repeatMode).toBe('all');
+    expect(state?.shuffle).toBe(true);
+
+    database.savePlaybackQueue([sampleTrack]);
+    const queue = database.getPlaybackQueue();
+    expect(queue.length).toBe(1);
+    expect(queue[0].id).toBe(sampleTrack.id);
+  });
+
+  it('upserts and retrieves artists and albums', () => {
+    database.upsertArtist('art_1', 'Anzles Music', 'https://example.com/art.jpg', 5);
+    const artists = database.getArtists();
+    expect(artists.some((a) => a.id === 'art_1' && a.name === 'Anzles Music')).toBe(true);
+
+    database.upsertAlbum('alb_1', 'Masterpiece', 'Anzles Music', 'https://example.com/cover.jpg', '2026', 10);
+    const albums = database.getAlbums();
+    expect(albums.some((al) => al.id === 'alb_1' && al.title === 'Masterpiece')).toBe(true);
+  });
 });

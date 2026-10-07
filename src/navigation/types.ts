@@ -10,6 +10,7 @@ export type TabParamList = {
 
 export type RootStackParamList = {
   MainTabs: NavigatorScreenParams<TabParamList>;
+  Login: undefined;
   Player: undefined;
   PlaylistDetail: { playlistId: string; title?: string };
   ArtistDetail: { artistId: string; name?: string };

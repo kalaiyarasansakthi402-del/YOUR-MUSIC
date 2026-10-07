@@ -1,9 +1,10 @@
-import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, StyleSheet, ActivityIndicator } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Home, Compass, Search, ListMusic, Settings } from 'lucide-react-native';
 
+import { LoginScreen } from '../screens/LoginScreen';
 import { HomeScreen } from '../screens/HomeScreen';
 import { ExploreScreen } from '../screens/ExploreScreen';
 import { SearchScreen } from '../screens/SearchScreen';
@@ -20,6 +21,7 @@ import { HelpScreen } from '../screens/HelpScreen';
 import { MiniPlayer } from '../components/MiniPlayer';
 
 import { useTheme } from '../theme/themeContext';
+import { useAuthStore } from '../store/authStore';
 import { TabParamList, RootStackParamList } from './types';
 
 const Tab = createBottomTabNavigator<TabParamList>();
@@ -96,14 +98,33 @@ const TabNavigator: React.FC = () => {
 
 export const RootNavigator: React.FC = () => {
   const { colors } = useTheme();
+  const { user, restoreSession } = useAuthStore();
+  const [isRestored, setIsRestored] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      await restoreSession();
+      setIsRestored(true);
+    })();
+  }, [restoreSession]);
+
+  if (!isRestored) {
+    return (
+      <View style={[styles.loadingContainer, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
 
   return (
     <Stack.Navigator
+      initialRouteName={user ? 'MainTabs' : 'Login'}
       screenOptions={{
         headerShown: false,
         contentStyle: { backgroundColor: colors.background },
       }}
     >
+      <Stack.Screen name="Login" component={LoginScreen} />
       <Stack.Screen name="MainTabs" component={TabNavigator} />
       <Stack.Screen
         name="Player"
@@ -127,5 +148,10 @@ export const RootNavigator: React.FC = () => {
 const styles = StyleSheet.create({
   tabContainer: {
     flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

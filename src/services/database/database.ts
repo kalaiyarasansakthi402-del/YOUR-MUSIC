@@ -69,6 +69,14 @@ class DatabaseService {
     return this.mapTrackRow(row);
   }
 
+  public getAllTracks(): Track[] {
+    const db = this.getDB();
+    const rows = db.getAllSync<Record<string, unknown>>(
+      'SELECT * FROM tracks ORDER BY play_count DESC, title ASC;'
+    );
+    return rows.map((r: Record<string, unknown>) => this.mapTrackRow(r));
+  }
+
   // --- FAVORITES ---
   public addFavorite(track: Track): void {
     const db = this.getDB();
@@ -128,6 +136,17 @@ class DatabaseService {
   public clearHistory(): void {
     const db = this.getDB();
     db.runSync('DELETE FROM history;');
+  }
+
+  public clearAllData(): void {
+    const db = this.getDB();
+    db.withTransactionSync(() => {
+      db.runSync('DELETE FROM history;');
+      db.runSync('DELETE FROM favorites;');
+      db.runSync('DELETE FROM playlist_tracks;');
+      db.runSync('DELETE FROM playlists;');
+      db.runSync('DELETE FROM downloads;');
+    });
   }
 
   // --- PLAYLISTS ---
@@ -254,6 +273,117 @@ class DatabaseService {
     const db = this.getDB();
     db.runSync('DELETE FROM downloads WHERE track_id = ?;', [trackId]);
     db.runSync('UPDATE tracks SET is_downloaded = 0, local_uri = NULL WHERE id = ?;', [trackId]);
+  }
+
+  // --- PLAYBACK QUEUE & STATE PERSISTENCE ---
+  public savePlaybackState(
+    currentTrackId: string | null,
+    position = 0,
+    isPlaying = false,
+    repeatMode = 'off',
+    shuffle = false
+  ): void {
+    const db = this.getDB();
+    db.runSync(
+      `INSERT INTO playback_state (id, current_track_id, position, is_playing, repeat_mode, shuffle, updated_at)
+       VALUES (1, ?, ?, ?, ?, ?, strftime('%s','now'))
+       ON CONFLICT(id) DO UPDATE SET
+         current_track_id=excluded.current_track_id,
+         position=excluded.position,
+         is_playing=excluded.is_playing,
+         repeat_mode=excluded.repeat_mode,
+         shuffle=excluded.shuffle,
+         updated_at=excluded.updated_at;`,
+      [currentTrackId, position, isPlaying ? 1 : 0, repeatMode, shuffle ? 1 : 0]
+    );
+  }
+
+  public getPlaybackState(): {
+    currentTrackId: string | null;
+    position: number;
+    isPlaying: boolean;
+    repeatMode: string;
+    shuffle: boolean;
+  } | null {
+    const db = this.getDB();
+    const row = db.getFirstSync<Record<string, unknown>>(
+      'SELECT * FROM playback_state WHERE id = 1;'
+    );
+    if (!row) return null;
+    return {
+      currentTrackId: row.current_track_id ? String(row.current_track_id) : null,
+      position: Number(row.position || 0),
+      isPlaying: Number(row.is_playing) === 1,
+      repeatMode: String(row.repeat_mode || 'off'),
+      shuffle: Number(row.shuffle) === 1,
+    };
+  }
+
+  public savePlaybackQueue(tracks: Track[]): void {
+    const db = this.getDB();
+    db.withTransactionSync(() => {
+      db.runSync('DELETE FROM playback_queue;');
+      tracks.forEach((track, idx) => {
+        this.upsertTrack(track);
+        db.runSync(
+          'INSERT INTO playback_queue (position, track_id) VALUES (?, ?);',
+          [idx, track.id]
+        );
+      });
+    });
+  }
+
+  public getPlaybackQueue(): Track[] {
+    const db = this.getDB();
+    const rows = db.getAllSync<Record<string, unknown>>(
+      `SELECT t.* FROM tracks t
+       INNER JOIN playback_queue pq ON t.id = pq.track_id
+       ORDER BY pq.position ASC;`
+    );
+    return rows.map((r: Record<string, unknown>) => this.mapTrackRow(r));
+  }
+
+  // --- ARTISTS & ALBUMS ---
+  public upsertArtist(id: string, name: string, image = '', trackCount = 0): void {
+    const db = this.getDB();
+    db.runSync(
+      `INSERT INTO artists (id, name, image, track_count) VALUES (?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET name=excluded.name, image=excluded.image, track_count=excluded.track_count;`,
+      [id, name, image, trackCount]
+    );
+  }
+
+  public getArtists(): Array<{ id: string; name: string; image: string; trackCount: number }> {
+    const db = this.getDB();
+    const rows = db.getAllSync<Record<string, unknown>>('SELECT * FROM artists ORDER BY name ASC;');
+    return rows.map((r) => ({
+      id: String(r.id),
+      name: String(r.name),
+      image: String(r.image || ''),
+      trackCount: Number(r.track_count || 0),
+    }));
+  }
+
+  public upsertAlbum(id: string, title: string, artist = '', artwork = '', year = '', trackCount = 0): void {
+    const db = this.getDB();
+    db.runSync(
+      `INSERT INTO albums (id, title, artist, artwork, year, track_count) VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET title=excluded.title, artist=excluded.artist, artwork=excluded.artwork, year=excluded.year, track_count=excluded.track_count;`,
+      [id, title, artist, artwork, year, trackCount]
+    );
+  }
+
+  public getAlbums(): Array<{ id: string; title: string; artist: string; artwork: string; year: string; trackCount: number }> {
+    const db = this.getDB();
+    const rows = db.getAllSync<Record<string, unknown>>('SELECT * FROM albums ORDER BY title ASC;');
+    return rows.map((r) => ({
+      id: String(r.id),
+      title: String(r.title),
+      artist: String(r.artist || ''),
+      artwork: String(r.artwork || ''),
+      year: String(r.year || ''),
+      trackCount: Number(r.track_count || 0),
+    }));
   }
 
   // --- INTEGRITY CHECK ---

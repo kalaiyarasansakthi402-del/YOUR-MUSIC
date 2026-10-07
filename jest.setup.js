@@ -101,6 +101,10 @@ jest.mock('expo-sqlite', () => {
   const playlistsStore = new Map();
   const playlistTracksStore = [];
   const downloadsStore = new Map();
+  const artistsStore = new Map();
+  const albumsStore = new Map();
+  const playbackQueueStore = [];
+  let playbackStateStore = null;
   const migrationsStore = new Set([1]);
 
   return {
@@ -135,6 +139,19 @@ jest.mock('expo-sqlite', () => {
           downloadsStore.set(params[0], { track_id: params[0], local_uri: params[1], file_size: params[2], downloaded_at: params[3] });
         } else if (lowerSql.includes('delete from downloads')) {
           downloadsStore.delete(params[0]);
+        } else if (lowerSql.includes('insert into artists')) {
+          const [id, name, image, track_count] = params;
+          artistsStore.set(id, { id, name, image, track_count });
+        } else if (lowerSql.includes('insert into albums')) {
+          const [id, title, artist, artwork, year, track_count] = params;
+          albumsStore.set(id, { id, title, artist, artwork, year, track_count });
+        } else if (lowerSql.includes('insert into playback_state')) {
+          const [current_track_id, position, is_playing, repeat_mode, shuffle] = params;
+          playbackStateStore = { id: 1, current_track_id, position, is_playing, repeat_mode, shuffle };
+        } else if (lowerSql.includes('insert into playback_queue')) {
+          playbackQueueStore.push({ position: params[0], track_id: params[1] });
+        } else if (lowerSql.includes('delete from playback_queue')) {
+          playbackQueueStore.length = 0;
         }
         return { changes: 1, lastInsertRowId: 1 };
       }),
@@ -149,12 +166,25 @@ jest.mock('expo-sqlite', () => {
         if (lowerSql.includes('from playlists where id = ?')) {
           return playlistsStore.get(params[0]) || null;
         }
+        if (lowerSql.includes('from playback_state where id = 1')) {
+          return playbackStateStore || null;
+        }
         return null;
       }),
       getAllSync: jest.fn((sql, params = []) => {
         const lowerSql = sql.toLowerCase();
         if (lowerSql.includes('sqlite_master')) {
-          return [{ name: 'tracks' }, { name: 'playlists' }, { name: 'favorites' }, { name: 'history' }, { name: 'downloads' }];
+          return [
+            { name: 'tracks' },
+            { name: 'playlists' },
+            { name: 'favorites' },
+            { name: 'history' },
+            { name: 'downloads' },
+            { name: 'artists' },
+            { name: 'albums' },
+            { name: 'playback_queue' },
+            { name: 'playback_state' },
+          ];
         }
         if (lowerSql.includes('from schema_migrations')) {
           return Array.from(migrationsStore).map((v) => ({ version: v }));
@@ -178,6 +208,17 @@ jest.mock('expo-sqlite', () => {
             const t = tracksStore.get(d.track_id);
             return t ? { ...t, d_local_uri: d.local_uri } : null;
           }).filter(Boolean);
+        }
+        if (lowerSql.includes('from artists')) {
+          return Array.from(artistsStore.values());
+        }
+        if (lowerSql.includes('from albums')) {
+          return Array.from(albumsStore.values());
+        }
+        if (lowerSql.includes('playback_queue')) {
+          return playbackQueueStore
+            .map((pq) => tracksStore.get(pq.track_id))
+            .filter(Boolean);
         }
         return [];
       }),

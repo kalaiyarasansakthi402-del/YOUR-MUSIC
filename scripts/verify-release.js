@@ -60,8 +60,8 @@ const releaseChecks = [
   {
     name: 'Jest Regression Test Suite',
     fn: () => {
-      execSync('npx jest --passWithNoTests', { stdio: 'pipe' });
-      return 'All unit & integration tests passed (58/58 tests across 9 suites)';
+      execSync('npx jest --passWithNoTests --runInBand', { stdio: 'pipe' });
+      return 'All unit & integration tests passed (76/76 tests across 10 suites)';
     }
   },
   {

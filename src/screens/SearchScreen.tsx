@@ -32,6 +32,8 @@ import { Header } from '../components/Header';
 import { TrackItem } from '../components/TrackItem';
 import { useTheme } from '../theme/themeContext';
 import { musicApi } from '../services/api/musicApi';
+import { usePlayerStore } from '../store/playerStore';
+import { logger } from '../utils/logger';
 import { Track, Artist, Album, SearchSource } from '../types';
 import { RootStackParamList } from '../navigation/types';
 
@@ -40,6 +42,7 @@ type FilterType = 'all' | 'tracks' | 'artists' | 'albums';
 export const SearchScreen: React.FC = () => {
   const { colors, t } = useTheme();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { playTrack } = usePlayerStore();
 
   const [query, setQuery] = useState('');
   const [source, setSource] = useState<SearchSource>('catalog');
@@ -403,7 +406,22 @@ export const SearchScreen: React.FC = () => {
 
             {results.tracks.map((track, idx) => (
               <View key={track.id} style={styles.trackCardWrapper}>
-                <TrackItem track={track} queue={results.tracks} index={idx} />
+                <TrackItem
+                  track={track}
+                  queue={results.tracks}
+                  index={idx}
+                  onPress={() => {
+                    if (track.source === 'youtube') {
+                      logger.info('YOUTUBE_TRACK_SELECTED', {
+                        trackId: track.id,
+                        videoId: track.videoId || track.youtubeVideoId,
+                        title: track.title,
+                        artist: track.artist,
+                      });
+                    }
+                    playTrack(track, results.tracks, idx);
+                  }}
+                />
                 {track.source === 'youtube' && (
                   <View style={styles.youtubeMetaBar}>
                     {track.publishedAt && (

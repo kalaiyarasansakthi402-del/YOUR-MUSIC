@@ -61,10 +61,27 @@ export interface Playlist {
 
 export type RepeatMode = 'off' | 'one' | 'all';
 
+export type PlayerStatus =
+  | 'idle'
+  | 'loading'
+  | 'ready'
+  | 'playing'
+  | 'paused'
+  | 'buffering'
+  | 'ended'
+  | 'error';
+
+export type PlaybackSource =
+  | { type: 'youtube'; videoId: string; title?: string }
+  | { type: 'audio'; url: string }
+  | { type: 'local'; uri: string };
+
 export interface PlaybackState {
   currentTrack: Track | null;
   isPlaying: boolean;
   isBuffering: boolean;
+  status: PlayerStatus;
+  playbackSource: PlaybackSource | null;
   position: number; // in seconds
   duration: number; // in seconds
   playbackRate: number;
@@ -76,6 +93,23 @@ export interface PlaybackState {
   queueIndex: number;
   error: string | null;
   isLoaded?: boolean;
+}
+
+export interface GoogleUser {
+  id: string;
+  name: string;
+  email: string;
+  photoUrl?: string;
+  idToken?: string;
+  accessToken?: string;
+  connectedToYouTube: boolean;
+  signedInAt: number;
+}
+
+export interface AuthState {
+  user: GoogleUser | null;
+  isLoading: boolean;
+  error: string | null;
 }
 
 export type ThemeMode = 'light' | 'dark' | 'system';

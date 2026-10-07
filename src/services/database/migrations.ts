@@ -94,6 +94,55 @@ export const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 2,
+    name: '002_playback_state_and_artists_albums',
+    up: (db: SQLiteDatabase) => {
+      // 8. Artists table
+      db.execSync(`
+        CREATE TABLE IF NOT EXISTS artists (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          image TEXT,
+          track_count INTEGER NOT NULL DEFAULT 0
+        );
+      `);
+
+      // 9. Albums table
+      db.execSync(`
+        CREATE TABLE IF NOT EXISTS albums (
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          artist TEXT,
+          artwork TEXT,
+          year TEXT,
+          track_count INTEGER NOT NULL DEFAULT 0
+        );
+      `);
+
+      // 10. Playback queue table
+      db.execSync(`
+        CREATE TABLE IF NOT EXISTS playback_queue (
+          position INTEGER PRIMARY KEY,
+          track_id TEXT NOT NULL,
+          FOREIGN KEY (track_id) REFERENCES tracks(id) ON DELETE CASCADE
+        );
+      `);
+
+      // 11. Playback state table
+      db.execSync(`
+        CREATE TABLE IF NOT EXISTS playback_state (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          current_track_id TEXT,
+          position INTEGER NOT NULL DEFAULT 0,
+          is_playing INTEGER NOT NULL DEFAULT 0,
+          repeat_mode TEXT NOT NULL DEFAULT 'off',
+          shuffle INTEGER NOT NULL DEFAULT 0,
+          updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+        );
+      `);
+    },
+  },
 ];
 
 export const runMigrations = (db: SQLiteDatabase): void => {

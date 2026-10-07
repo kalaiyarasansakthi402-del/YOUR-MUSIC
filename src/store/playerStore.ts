@@ -14,8 +14,13 @@ interface PlayerStoreState extends PlaybackState {
   setRepeatMode: (mode: RepeatMode) => void;
   setVolume: (volume: number) => void;
   addToQueue: (track: Track) => void;
+  playNext: (track: Track) => void;
   removeFromQueue: (index: number) => void;
+  reorderQueue: (fromIndex: number, toIndex: number) => void;
+  setPlaybackRate: (rate: number) => Promise<void>;
+  clearQueue: () => void;
   retry: () => Promise<void>;
+  stop: () => Promise<void>;
 }
 
 export const usePlayerStore = create<PlayerStoreState>((set) => {
@@ -71,12 +76,32 @@ export const usePlayerStore = create<PlayerStoreState>((set) => {
       playerService.addToQueue(track);
     },
 
+    playNext: (track: Track) => {
+      playerService.playNext(track);
+    },
+
     removeFromQueue: (index: number) => {
       playerService.removeFromQueue(index);
     },
 
+    reorderQueue: (fromIndex: number, toIndex: number) => {
+      playerService.reorderQueue(fromIndex, toIndex);
+    },
+
+    setPlaybackRate: async (rate: number) => {
+      await playerService.setPlaybackRate(rate);
+    },
+
+    clearQueue: () => {
+      playerService.clearQueue();
+    },
+
     retry: async () => {
       await playerService.retry();
+    },
+
+    stop: async () => {
+      await playerService.stop();
     },
   };
 });

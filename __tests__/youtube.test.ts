@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { YouTubeProvider } from '../src/services/api/youtubeProvider';
+import { YouTubeProvider, parseIsoDuration } from '../src/services/api/youtubeProvider';
 import { youtubeConfig, YOUTUBE_API_KEY_STORAGE, NOT_CONFIGURED_MESSAGE } from '../src/services/api/youtubeConfig';
 import { musicApi } from '../src/services/api/musicApi';
 import { logger } from '../src/utils/logger';
@@ -74,6 +74,23 @@ describe('YouTube Data API v3 Provider & Integration Suite', () => {
       expect(notice).toContain('com.yourmusic.app');
       expect(notice).toContain('SHA-1');
       expect(notice).toContain('backend proxy');
+    });
+  });
+
+  describe('ISO 8601 Duration Parsing', () => {
+    it('parses standard ISO durations correctly', () => {
+      expect(parseIsoDuration('PT3M45S')).toBe(225);
+      expect(parseIsoDuration('PT1H2M10S')).toBe(3730);
+      expect(parseIsoDuration('PT45S')).toBe(45);
+      expect(parseIsoDuration('PT10M')).toBe(600);
+      expect(parseIsoDuration('PT2H')).toBe(7200);
+      expect(parseIsoDuration('P1DT1H')).toBe(90000);
+    });
+
+    it('handles empty or malformed duration strings safely', () => {
+      expect(parseIsoDuration('')).toBe(0);
+      expect(parseIsoDuration(undefined)).toBe(0);
+      expect(parseIsoDuration('invalid')).toBe(0);
     });
   });
 
