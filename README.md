@@ -1,4 +1,4 @@
-# 🎵 YOUR MUSIC
+# YOUR MUSIC
 
 **Your Music — By Anzles** is an Android music app built with Expo, React Native, and TypeScript. It combines a curated sample catalog, bundled offline audio, a personal music library, and optional YouTube Data API search.
 
@@ -39,6 +39,12 @@ YouTube results open in the official YouTube app or a browser. In-app audio play
 | Quality checks | TypeScript, ESLint, Jest, React Native Testing Library, Expo Doctor |
 | Android builds | Gradle and Expo Application Services (EAS) |
 
+## Architecture and Android background playback
+
+Expo registers the React Native entry point in `index.js`. `App.tsx` mounts React Navigation inside the theme and error-handling providers and initializes SQLite, offline storage, the player, and the library during startup. TypeScript screens and shared components live in `src/`; Zustand stores connect them to the audio, API, authentication, database, and offline services.
+
+`PlayerService` manages the queue and playback state and uses `expo-av` to play audio. It requests background audio with `staysActiveInBackground: true`, and the Android manifest declares media-playback foreground-service and wake-lock permissions. If audio-mode setup fails, the service falls back to foreground playback. Background behavior should be checked on the target Android device, including its battery restrictions. This playback path uses bundled files, local downloads, and direct audio URLs; YouTube results open externally.
+
 ## Installation
 
 Install Node.js and npm, plus Git. Native Android development also requires a JDK, Android Studio/Android SDK, and an emulator or USB-connected device configured for development.
@@ -46,10 +52,10 @@ Install Node.js and npm, plus Git. Native Android development also requires a JD
 ```powershell
 git clone https://github.com/kalaiyarasansakthi402-del/YOUR-MUSIC.git
 cd YOUR-MUSIC
-npm ci
+npm install
 ```
 
-The lockfile records the project's dependency versions. Use `npm ci` to install them consistently.
+The lockfile records the project's dependency versions. For a clean installation that strictly follows the committed lockfile, use `npm ci` instead of `npm install`.
 
 The repository includes the native Android source. Debug builds use the existing local `android/app/debug.keystore` when present, or Android's default development signing configuration on a fresh clone. Signing files stay outside Git.
 
@@ -179,5 +185,14 @@ eas.json             EAS build profiles
 Keep real API keys, `.env` files, credentials, signing files, Google services configuration, dependency folders, caches, build outputs, APKs, and AABs outside version control. The `.env.example` template contains placeholder values only.
 
 Mobile clients and device storage cannot provide complete credential isolation. Keep keys out of public source, restrict their use in Google Cloud as appropriate for your deployment, and use a backend if credentials must remain confidential.
+
+## YouTube API usage and compliance
+
+YouTube Data API v3 supplies search results and metadata. Follow the [YouTube API Services Terms of Service](https://developers.google.com/youtube/terms/api-services-terms-of-service) and [Developer Policies](https://developers.google.com/youtube/terms/developer-policies) when configuring or distributing the app.
+
+- Do not add YouTube media downloads, offline copies, audio extraction, or hidden/background YouTube playback. The app's offline audio features are for bundled or independently authorized direct audio sources.
+- Preserve YouTube attribution and respect API quotas. Refresh or delete cached API metadata according to the applicable retention rules.
+- Provide the required user-facing terms, privacy disclosures, consent, and account-access revocation/deletion controls. Keep OAuth credentials and tokens private.
+- Use music, artwork, and other media only when you hold the necessary rights or permission.
 
 **Developed by Anzles · Android package: `com.yourmusic.app`**
